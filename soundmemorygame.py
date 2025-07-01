@@ -1,6 +1,8 @@
 import tkinter as tk
 import random
 import pygame.mixer
+import RPi.GPIO as GPIO
+from threading import Thread
 
 pygame.mixer.init()
 
@@ -43,7 +45,10 @@ class MyGUI:
                 button.card_id = self.card_ids.pop()
                 button.grid(row=row, column=col, padx=5, pady=5)
                 self.buttons.append(button)
-
+        
+        # Start GPIO setup in a seperate thread
+        Thread(target=self.setup_gpio, daemon=True).start()
+        self.window.protocol("WM_DELETE_WINDOW", self.cleanup) # Clean GPIO on close
         self.window.mainloop()
 
     def button_clicked(self, row, col):
@@ -84,14 +89,31 @@ class MyGUI:
         card2["text"] = "?"
         card1["state"] = "normal"
         card2["state"] = "normal"
-
-
-#if name.id == name.secondbuttonclicked.id: = true
-#     # Check if the two clicked buttons match
-#      if button.card_id == self.first_button.card_id:
-#          print("It's a match!")
-#      else:
-#          print("Not a match.")
-#
-
+        
+    def setup_gpio(self):
+        GPIO.setmode(GPIO.BCM)
+        
+        # Map GPIO pins to specific (row, col) positions in the grid
+        self.gpio_button_map = {
+            17: (0, 0), # GPIO17 controls button at (0, 0)
+            27: (0, 1),
+            22: (0, 2),
+            23: (0, 3),
+        }
+        
+        for pin in self.gpio_button_map:
+            GPIO.setup(pin, GPIO.IN, pull_up_down=GPIO.PUD_UP)
+            GPIO.add_event_detect(pin, GPIO.FALLING, callback=self.handle_gpio_button, bouncetime=300)
+    
+    def handle_gpio_button(self, channel):
+        if channel in self.gpio_button_map:
+            row, col = self.gpio_button_map[channel]
+            # Use Tkinter-safe method to interact with GUI
+            self.window.after(0, self.button_clicked, row, col)
+            
+    def cleanup(self):
+        print("Cleaning up GPIO...")
+        GPIO.cleanup()
+        self.window.destroy()
+        
 MyGUI()
